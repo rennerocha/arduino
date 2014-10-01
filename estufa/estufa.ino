@@ -3,7 +3,6 @@
 // Biblioteca DHT11 -> http://playground.arduino.cc/Main/DHT11Lib
 #include <dht11.h>
 
-#define DEBUG
 
 /* Arduino PINs */
 const int coolerPin      = 5;
@@ -20,7 +19,7 @@ const float minTemperature = 28.0;
 const float maxTemperature = 31.0;
 
 /* Auxiliary variables */
-const int readInterval = 2;  // in minutes
+const long readInterval = 1;  // in minutes
 long previousMillis = 0; // will store last time the read interval was executed
 
 /* PIN status */
@@ -105,7 +104,13 @@ int sendActualStatusToServer(float temperature, float humidity) {
     stash.print("temperature=");
     stash.print(temperature);
     stash.print("&humidity=");
-    stash.println(humidity);
+    stash.print(humidity);
+    stash.print("&ledLampStatus=");
+    stash.print(ledLampStatus);
+    stash.print("&warmingLampPinStatus=");
+    stash.print(warmingLampPinStatus);
+    stash.print("&coolerPinStatus=");
+    stash.print(coolerPinStatus);
     stash.save();
 
     int stash_size = stash.size();
@@ -154,7 +159,7 @@ void loop() {
 
     ether.packetLoop(ether.packetReceive());
 
-    if(currentMillis - previousMillis > readInterval * 2000) {
+    if(currentMillis - previousMillis > readInterval * 1000 * 60) {
         previousMillis = currentMillis;
         readTemperature(actualTemperature, actualHumidity);
 
@@ -163,6 +168,15 @@ void loop() {
 
         if(ethernetAvailable) {
             sendActualStatusToServer(actualTemperature, actualHumidity);
+        } else {
+            ethernetAvailable = (
+              ether.begin(sizeof Ethernet::buffer, mymac) != 0 
+              && ether.dhcpSetup()
+              && ether.dnsLookup(website));
+#ifdef DEBUG
+  Serial.print("Ethernet available: ");
+  Serial.println(ethernetAvailable);
+#endif
         }
     }
 }
