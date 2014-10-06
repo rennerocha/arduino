@@ -3,20 +3,22 @@
 // Biblioteca DHT11 -> http://playground.arduino.cc/Main/DHT11Lib
 #include <dht11.h>
 
-
 /* Arduino PINs */
 const int coolerPin      = 5;
 const int ledLampPin     = 6;
 const int warmingLampPin = 7;
-const int tempSensorPin  = 9;
+const int internalTempSensorPin  = 9;
+const int externalTempSensorPin  = 5;
 
 /* Control variables */
-float actualTemperature = 0.0;
-float actualHumidity    = 0.0;
+float actualInternalTemperature = 0.0;
+float actualInternalHumidity    = 0.0;
+float actualExternalTemperature = 0.0;
+float actualExternalHumidity    = 0.0;
 
 /* Limits and intervals */
 const float minTemperature = 28.0;
-const float maxTemperature = 31.0;
+const float maxTemperature = 29.0;
 
 /* Auxiliary variables */
 const long readInterval = 1;  // in minutes
@@ -36,24 +38,27 @@ const char website[] PROGMEM = "estufa.rennerocha.com";
 int ethernetAvailable = 0;
 
 
-int readTemperature(float& temperature, float& humidity) {
-    dht11 DHT11;
-    int chk = DHT11.read(tempSensorPin);
+int readTemperature(float& internalTemperature, float& internalHumidity, float& externalTemperature, float& externalHumidity) {
+    dht11 internalDHT11;
+    dht11 externalDHT11;
+
+    int internalChk = internalDHT11.read(internalTempSensorPin);
+    int externalChk = externalDHT11.read(externalTempSensorPin);
 
 #ifdef DEBUG
     Serial.println("DHT11 reading");
 #endif
 
-    switch (chk) {
+    switch (internalChk) {
         case DHTLIB_OK:
-            temperature = (float)DHT11.temperature;
-            humidity = (float)DHT11.humidity;
+            internalTemperature = (float)internalDHT11.temperature;
+            internalHumidity = (float)internalDHT11.humidity;
 
 #ifdef DEBUG
-  Serial.print("Temperature (°C): ");
-  Serial.println(temperature, 2);
-  Serial.print("Humidity (%): ");
-  Serial.println(humidity, 2);
+  Serial.print("Internal Temperature (°C): ");
+  Serial.println(internalTemperature, 2);
+  Serial.print("Internal Humidity (%): ");
+  Serial.println(internalHumidity, 2);
 #endif
 
             break;
@@ -61,10 +66,31 @@ int readTemperature(float& temperature, float& humidity) {
         case DHTLIB_ERROR_TIMEOUT:
         default:
             // Temperature/Humidity read failed
-            temperature = -1.0;
-            humidity    = -1.0;
-            return -1;
+            internalTemperature = -1.0;
+            internalHumidity    = -1.0;
     }
+    
+    switch (externalChk) {
+        case DHTLIB_OK:
+            externalTemperature = (float)externalDHT11.temperature;
+            externalHumidity = (float)externalDHT11.humidity;
+
+#ifdef DEBUG
+  Serial.print("External Temperature (°C): ");
+  Serial.println(internalTemperature, 2);
+  Serial.print("External Humidity (%): ");
+  Serial.println(internalHumidity, 2);
+#endif
+
+            break;
+        case DHTLIB_ERROR_CHECKSUM:
+        case DHTLIB_ERROR_TIMEOUT:
+        default:
+            // Temperature/Humidity read failed
+            externalTemperature = -1.0;
+            externalHumidity    = -1.0;
+    }
+    
     return 0;
 }
 
@@ -95,16 +121,20 @@ int updateWarmingStatus(float temperature, float humidity) {
     return 0;
 }
 
-int sendActualStatusToServer(float temperature, float humidity) {
+int sendActualStatusToServer(float internalTemperature, float internalHumidity, float externalTemperature, float externalHumidity) {
 #ifdef DEBUG
     Serial.println("Sending data to server");
 #endif
 
     byte sd = stash.create();
-    stash.print("temperature=");
-    stash.print(temperature);
-    stash.print("&humidity=");
-    stash.print(humidity);
+    stash.print("internalTemperature=");
+    stash.print(internalTemperature);
+    stash.print("&internalHumidity=");
+    stash.print(internalHumidity);
+    stash.print("externalTemperature=");
+    stash.print(externalTemperature);
+    stash.print("&externalHumidity=");
+    stash.print(externalHumidity);
     stash.print("&ledLampStatus=");
     stash.print(ledLampStatus);
     stash.print("&warmingLampPinStatus=");
@@ -150,7 +180,7 @@ void setup() {
   Serial.println(ethernetAvailable);
 #endif
 
-    readTemperature(actualTemperature, actualHumidity);
+    readTemperature(actualInternalTemperature, actualInternalHumidity, actualExternalTemperature, actualExternalHumidity);
 }
 
 
@@ -161,13 +191,13 @@ void loop() {
 
     if(currentMillis - previousMillis > readInterval * 1000 * 60) {
         previousMillis = currentMillis;
-        readTemperature(actualTemperature, actualHumidity);
+        readTemperature(actualInternalTemperature, actualInternalHumidity, actualExternalTemperature, actualExternalHumidity);
 
         /* Actions after sensor read */
-        updateWarmingStatus(actualTemperature, actualHumidity);
+        updateWarmingStatus(actualInternalTemperature, actualInternalHumidity);
 
         if(ethernetAvailable) {
-            sendActualStatusToServer(actualTemperature, actualHumidity);
+            sendActualStatusToServer(actualInternalTemperature, actualInternalHumidity, actualExternalTemperature, actualExternalHumidity);
         } else {
             ethernetAvailable = (
               ether.begin(sizeof Ethernet::buffer, mymac) != 0 
