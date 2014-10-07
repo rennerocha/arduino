@@ -37,6 +37,13 @@ Stash stash;
 const char website[] PROGMEM = "estufa.rennerocha.com";
 int ethernetAvailable = 0;
 
+/* LED Lamp cycle time in minutes (ledLampOnTime + ledLampOffTime MUST be equal to 1440) */
+const int ledLampOnTime = 720;
+const int ledLampOffTime = 1440 - ledLampOnTime;
+
+/* Counter for time LED lamp is On or Off */
+int actualLedLampOn = 0;
+int actualLedLampOff = 0;
 
 int readTemperature(float& internalTemperature, float& internalHumidity, float& externalTemperature, float& externalHumidity) {
     dht11 internalDHT11;
@@ -77,9 +84,9 @@ int readTemperature(float& internalTemperature, float& internalHumidity, float& 
 
 #ifdef DEBUG
   Serial.print("External Temperature (°C): ");
-  Serial.println(internalTemperature, 2);
+  Serial.println(externalTemperature, 2);
   Serial.print("External Humidity (%): ");
-  Serial.println(internalHumidity, 2);
+  Serial.println(externalHumidity, 2);
 #endif
 
             break;
@@ -131,7 +138,7 @@ int sendActualStatusToServer(float internalTemperature, float internalHumidity, 
     stash.print(internalTemperature);
     stash.print("&internalHumidity=");
     stash.print(internalHumidity);
-    stash.print("externalTemperature=");
+    stash.print("&externalTemperature=");
     stash.print(externalTemperature);
     stash.print("&externalHumidity=");
     stash.print(externalHumidity);
@@ -190,6 +197,34 @@ void loop() {
     ether.packetLoop(ether.packetReceive());
 
     if(currentMillis - previousMillis > readInterval * 1000 * 60) {
+
+        if(ledLampStatus == LOW) {
+#ifdef DEBUG
+  Serial.print("actualLedLampOff: ");
+  Serial.println(actualLedLampOff);
+  Serial.print("ledLampOffTime: ");
+  Serial.println(ledLampOffTime);
+#endif
+            actualLedLampOff++;
+            if(actualLedLampOff > ledLampOffTime) {
+              ledLampStatus = HIGH;
+              actualLedLampOff = 0;
+            }
+        } else {
+#ifdef DEBUG
+  Serial.print("actualLedLampOn: ");
+  Serial.println(actualLedLampOn);
+  Serial.print("ledLampOnTime: ");
+  Serial.println(ledLampOnTime);
+#endif
+            actualLedLampOn++;
+            if(actualLedLampOn > ledLampOnTime) {
+              ledLampStatus = LOW;
+              actualLedLampOn = 0;
+            }
+        }
+        digitalWrite(ledLampPin, ledLampStatus);
+
         previousMillis = currentMillis;
         readTemperature(actualInternalTemperature, actualInternalHumidity, actualExternalTemperature, actualExternalHumidity);
 
